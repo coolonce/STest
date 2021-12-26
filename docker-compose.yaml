@@ -1,0 +1,78 @@
+version: '3'
+
+services:
+  redis:
+    image: redis
+    networks:
+      - "deployml_network" 
+  nginx:
+    container_name: nginx
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - "./configs/conf.d:/etc/nginx/conf.d"
+    networks:
+      - "deployml_network"
+  db:
+    image: postgres:12-alpine
+    container_name: postgres
+    volumes:
+      - "./storage/postgres:/var/lib/postgresql/data/"
+    environment:
+        POSTGRES_USER: root
+        POSTGRES_PASSWORD: root
+        POSTGRES_DB: sber
+    expose:
+        - 5432
+    networks:
+      - "deployml_network"
+  ml_service:
+    container_name: ml_service
+    image: ml_service
+    build:
+      context: "./ml"
+      dockerfile: "Dockerfile"
+    environment:
+      DB_DRIVER: postgresql
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sber
+      DB_TABLE: order
+      LOCAL_STORAGE: /ml/local_storage
+      REDIS_HOST: redis
+      REDIS_QUEUE: 1
+      REDIS_STATUS_ORDER: 2
+      MODEL_PATH: /ml/storage/model.sav
+    volumes:
+      - "./storage/local:/ml/local_storage"
+      - "./storage/ml:/ml/storage"
+    networks:
+      - "deployml_network"
+  api:
+    container_name: api
+    image: api
+    build:
+        context: "./backend"
+        dockerfile: "Dockerfile"
+    expose:
+      - 8000
+    environment:
+      DB_DRIVER: postgresql
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sber      
+      LOCAL_STORAGE: /app/local_storage
+      REDIS_HOST: redis
+      REDIS_QUEUE: 1
+    volumes:
+      - "./storage/local:/app/local_storage"
+    networks:
+      - "deployml_network"
+networks:
+  deployml_network:
+    driver: bridge
